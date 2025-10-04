@@ -19,16 +19,24 @@ def check_requirements():
     """Check if all requirements are installed"""
     print("📋 Checking requirements...")
     
-    required_packages = [
-        'torch', 'torchvision', 'numpy', 'opencv-python', 
-        'matplotlib', 'seaborn', 'pillow', 'scikit-image',
-        'tensorboard', 'tqdm'
-    ]
+    # Map package names to their import names
+    package_imports = {
+        'torch': 'torch',
+        'torchvision': 'torchvision', 
+        'numpy': 'numpy',
+        'opencv-python': 'cv2',
+        'matplotlib': 'matplotlib',
+        'seaborn': 'seaborn',
+        'pillow': 'PIL',
+        'scikit-image': 'skimage',
+        'tensorboard': 'tensorboard',
+        'tqdm': 'tqdm'
+    }
     
     missing_packages = []
-    for package in required_packages:
+    for package, import_name in package_imports.items():
         try:
-            __import__(package.replace('-', '_'))
+            __import__(import_name)
             print(f"  ✓ {package}")
         except ImportError:
             print(f"  ✗ {package} (missing)")

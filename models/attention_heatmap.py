@@ -128,7 +128,7 @@ class AttentionHeatmapGenerator(nn.Module):
         
         # Final attention map generation
         self.attention_fusion = nn.Sequential(
-            nn.Conv2d(feature_channels * 2, feature_channels, 3, padding=1),
+            nn.Conv2d(feature_channels + feature_channels//2 * 3, feature_channels, 3, padding=1),
             nn.BatchNorm2d(feature_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(feature_channels, 1, 1),
