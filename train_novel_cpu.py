@@ -21,6 +21,14 @@ from models.discriminator import SRNetDiscriminator
 from utils.dataset import SteganographyDataset
 from utils.metrics import compute_metrics
 
+# Import visualization functions
+import matplotlib.pyplot as plt
+from demo_visualization import (
+    visualize_comprehensive_attention_analysis,
+    visualize_embedding_statistics,
+    tensor_to_numpy
+)
+
 class CPUOptimizedTrainer:
     """CPU-optimized trainer for novel attention-guided steganography"""
     
@@ -205,6 +213,9 @@ class CPUOptimizedTrainer:
         
         val_losses = {}
         val_metrics = {'psnr': [], 'ssim': []}
+        sample_results = None
+        sample_cover = None
+        sample_secret = None
         
         with torch.no_grad():
             for batch_idx, (cover_images, secret_images) in enumerate(tqdm(dataloader, desc='Validation')):
@@ -221,6 +232,12 @@ class CPUOptimizedTrainer:
                     mode='train', 
                     embedding_strategy=self.args.embedding_strategy
                 )
+                
+                # Save first batch for visualization
+                if batch_idx == 0:
+                    sample_results = results
+                    sample_cover = cover_images
+                    sample_secret = secret_images
                 
                 # Compute losses
                 losses = self.compute_generator_losses(results, cover_images, secret_images)
@@ -258,8 +275,125 @@ class CPUOptimizedTrainer:
         val_metrics['psnr'] = np.mean(val_metrics['psnr'])
         val_metrics['ssim'] = np.mean(val_metrics['ssim'])
         
+        # Save validation visualizations
+        if sample_results is not None:
+            viz_dir = os.path.join(self.args.output_dir, 'visualizations')
+            os.makedirs(viz_dir, exist_ok=True)
+            self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir)
+        
         return val_losses, val_metrics
     
+    def save_epoch_visualizations(self, results, cover_images, secret_images, epoch, save_dir):
+        """Save comprehensive visualizations for the epoch"""
+        try:
+            # Create epoch-specific directory
+            epoch_dir = os.path.join(save_dir, f'epoch_{epoch:03d}')
+            os.makedirs(epoch_dir, exist_ok=True)
+            
+            print(f"  📊 Saving epoch {epoch} visualizations...")
+            
+            # Take first sample for visualization
+            sample_cover = cover_images[:1]
+            sample_secret = secret_images[:1]
+            sample_results = {
+                'stego_image': results['stego_image'][:1],
+                'extracted_secret': results['extracted_secret'][:1],
+                'cover_attention': {
+                    'embedding_attention': results['cover_attention']['embedding_attention'][:1]
+                },
+                'secret_attention': {
+                    'embedding_attention': results['secret_attention']['embedding_attention'][:1]
+                },
+                'embedding_map': results['embedding_map'][:1]
+            }
+            
+            # Add fusion weights if available
+            if 'fusion_weights' in results:
+                sample_results['fusion_weights'] = results['fusion_weights'][:1]
+            
+            # 1. Comprehensive attention analysis
+            plt.ioff()  # Turn off interactive mode
+            visualize_comprehensive_attention_analysis(
+                sample_cover, sample_secret, sample_results,
+                save_path=os.path.join(epoch_dir, 'comprehensive_analysis.png')
+            )
+            plt.close('all')
+            
+            # 2. Embedding statistics
+            visualize_embedding_statistics(
+                sample_results['embedding_map'],
+                save_path=os.path.join(epoch_dir, 'embedding_statistics.png')
+            )
+            plt.close('all')
+            
+            # 3. Create training progress visualization
+            self.create_training_progress_viz(sample_results, epoch, epoch_dir)
+            
+            print(f"  ✅ Visualizations saved to: {epoch_dir}")
+            
+        except Exception as e:
+            print(f"  ⚠️  Visualization failed: {e}")
+    
+    def create_training_progress_viz(self, results, epoch, save_dir):
+        """Create training progress specific visualizations"""
+        try:
+            fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+            
+            # Extract data
+            cover_att = tensor_to_numpy(results['cover_attention']['embedding_attention'], squeeze=True)
+            secret_att = tensor_to_numpy(results['secret_attention']['embedding_attention'], squeeze=True)
+            embedding_map = tensor_to_numpy(results['embedding_map'], squeeze=True)
+            stego_img = tensor_to_numpy(results['stego_image'])
+            extracted_img = tensor_to_numpy(results['extracted_secret'])
+            
+            # Row 1: Attention maps
+            im1 = axes[0, 0].imshow(cover_att, cmap='hot', vmin=0, vmax=1)
+            axes[0, 0].set_title(f'Cover Attention\nEpoch {epoch}')
+            axes[0, 0].axis('off')
+            plt.colorbar(im1, ax=axes[0, 0], fraction=0.046, pad=0.04)
+            
+            im2 = axes[0, 1].imshow(secret_att, cmap='hot', vmin=0, vmax=1)
+            axes[0, 1].set_title(f'Secret Attention\nEpoch {epoch}')
+            axes[0, 1].axis('off')
+            plt.colorbar(im2, ax=axes[0, 1], fraction=0.046, pad=0.04)
+            
+            im3 = axes[0, 2].imshow(embedding_map, cmap='viridis', vmin=0, vmax=1)
+            axes[0, 2].set_title(f'Embedding Map\nEpoch {epoch}')
+            axes[0, 2].axis('off')
+            plt.colorbar(im3, ax=axes[0, 2], fraction=0.046, pad=0.04)
+            
+            # Row 2: Results and statistics
+            axes[1, 0].imshow(stego_img)
+            axes[1, 0].set_title(f'Stego Image\nEpoch {epoch}')
+            axes[1, 0].axis('off')
+            
+            axes[1, 1].imshow(extracted_img)
+            axes[1, 1].set_title(f'Extracted Secret\nEpoch {epoch}')
+            axes[1, 1].axis('off')
+            
+            # Embedding statistics
+            axes[1, 2].hist(embedding_map.flatten(), bins=30, alpha=0.7, color='skyblue')
+            axes[1, 2].set_title(f'Embedding Distribution\nEpoch {epoch}')
+            axes[1, 2].set_xlabel('Embedding Strength')
+            axes[1, 2].set_ylabel('Frequency')
+            axes[1, 2].grid(True, alpha=0.3)
+            
+            # Add statistics text
+            mean_embed = embedding_map.mean()
+            std_embed = embedding_map.std()
+            max_embed = embedding_map.max()
+            
+            stats_text = f'Mean: {mean_embed:.3f}\nStd: {std_embed:.3f}\nMax: {max_embed:.3f}'
+            axes[1, 2].text(0.7, 0.8, stats_text, transform=axes[1, 2].transAxes,
+                           bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(save_dir, 'training_progress.png'), dpi=300, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            print(f"  ⚠️  Training progress viz failed: {e}")
+
     def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
         """Save model checkpoint"""
         checkpoint = {
@@ -314,13 +448,14 @@ def main():
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints_cpu', help='Checkpoint directory')
     parser.add_argument('--log_interval', type=int, default=5, help='Log interval')
     parser.add_argument('--save_interval', type=int, default=5, help='Save interval')
-    parser.add_argument('--val_interval', type=int, default=5, help='Validation interval')
+    parser.add_argument('--val_interval', type=int, default=1, help='Validation interval (every epoch for viz)')
     
     args = parser.parse_args()
     
     # Create directories
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.checkpoint_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir, 'visualizations'), exist_ok=True)
     
     print("=" * 60)
     print("CPU-OPTIMIZED NOVEL STEGANOGRAPHY TRAINING")
@@ -330,6 +465,7 @@ def main():
     print(f"Image Size: {args.image_size}")
     print(f"Hidden Channels: {args.hidden_channels}")
     print(f"Device: CPU")
+    print(f"Visualizations: Every epoch")
     print("=" * 60)
     
     # Create datasets
@@ -389,17 +525,17 @@ def main():
         val_losses = None
         val_metrics = None
         
-        if (epoch + 1) % args.val_interval == 0:
-            val_losses, val_metrics = trainer.validate(val_loader, epoch)
-            
-            print(f"Validation Losses:")
-            for key, value in val_losses.items():
-                print(f"  {key}: {value:.6f}")
-            
-            print(f"Validation Metrics:")
-            for key, value in val_metrics.items():
-                print(f"  {key}: {value:.4f}")
+        # Run validation every epoch for visualizations
+        val_losses, val_metrics = trainer.validate(val_loader, epoch)
         
+        print(f"Validation Losses:")
+        for key, value in val_losses.items():
+            print(f"  {key}: {value:.6f}")
+        
+        print(f"Validation Metrics:")
+        for key, value in val_metrics.items():
+            print(f"  {key}: {value:.4f}")
+
         # Save checkpoint
         is_best = False
         if val_metrics and val_metrics['psnr'] > best_psnr:
