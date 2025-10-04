@@ -23,14 +23,6 @@ from utils.dataset import SteganographyDataset
 from utils.metrics import compute_metrics
 from utils.visualization import save_attention_visualizations
 
-# Import comprehensive visualization functions
-import matplotlib.pyplot as plt
-from demo_visualization import (
-    visualize_comprehensive_attention_analysis,
-    visualize_embedding_statistics,
-    tensor_to_numpy
-)
-
 class NovelSteganographyTrainer:
     """Trainer for novel attention-guided steganography"""
     
@@ -303,78 +295,9 @@ class NovelSteganographyTrainer:
             for key, value in val_metrics.items():
                 self.writer.add_scalar(f'Val/{key}', value, epoch)
         
-        
-        # Save validation visualizations
-        if self.writer:
-            viz_dir = os.path.join(self.args.output_dir, 'visualizations')
-            os.makedirs(viz_dir, exist_ok=True)
-            # Use first batch for visualization
-            sample_cover = cover_images[:1] if 'cover_images' in locals() else None
-            sample_secret = secret_images[:1] if 'secret_images' in locals() else None
-            if sample_cover is not None and sample_secret is not None:
-                sample_results = {
-                    'stego_image': results['stego_image'][:1],
-                    'extracted_secret': results['extracted_secret'][:1],
-                    'cover_attention': results['cover_attention'],
-                    'secret_attention': results['secret_attention'],
-                    'embedding_map': results['embedding_map'][:1]
-                }
-                if 'fusion_weights' in results:
-                    sample_results['fusion_weights'] = results['fusion_weights'][:1]
-                self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir)
-
         return val_losses, val_metrics
     
-
-    def save_epoch_visualizations(self, results, cover_images, secret_images, epoch, save_dir):
-        """Save comprehensive visualizations for the epoch"""
-        try:
-            # Create epoch-specific directory
-            epoch_dir = os.path.join(save_dir, f'epoch_{epoch:03d}')
-            os.makedirs(epoch_dir, exist_ok=True)
-            
-            print(f"  📊 Saving epoch {epoch} visualizations...")
-            
-            # Take first sample for visualization
-            sample_cover = cover_images[:1]
-            sample_secret = secret_images[:1]
-            sample_results = {
-                'stego_image': results['stego_image'][:1],
-                'extracted_secret': results['extracted_secret'][:1],
-                'cover_attention': {
-                    'embedding_attention': results['cover_attention']['embedding_attention'][:1]
-                },
-                'secret_attention': {
-                    'embedding_attention': results['secret_attention']['embedding_attention'][:1]
-                },
-                'embedding_map': results['embedding_map'][:1]
-            }
-            
-            # Add fusion weights if available
-            if 'fusion_weights' in results:
-                sample_results['fusion_weights'] = results['fusion_weights'][:1]
-            
-            # 1. Comprehensive attention analysis
-            plt.ioff()  # Turn off interactive mode
-            visualize_comprehensive_attention_analysis(
-                sample_cover, sample_secret, sample_results,
-                save_path=os.path.join(epoch_dir, 'comprehensive_analysis.png')
-            )
-            plt.close('all')
-            
-            # 2. Embedding statistics
-            visualize_embedding_statistics(
-                sample_results['embedding_map'],
-                save_path=os.path.join(epoch_dir, 'embedding_statistics.png')
-            )
-            plt.close('all')
-            
-            print(f"  ✅ Visualizations saved to: {epoch_dir}")
-            
-        except Exception as e:
-            print(f"  ⚠️  Visualization failed: {e}")
-
-        def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
+    def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
         """Save model checkpoint"""
         checkpoint = {
             'epoch': epoch,

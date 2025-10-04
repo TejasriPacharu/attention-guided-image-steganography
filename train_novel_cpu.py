@@ -472,13 +472,13 @@ def main():
     train_dataset = SteganographyDataset(
         os.path.join(args.data_dir, 'train'),
         image_size=args.image_size,
-        transform_type='train'
+        mode='train'
     )
     
     val_dataset = SteganographyDataset(
         os.path.join(args.data_dir, 'val'),
         image_size=args.image_size,
-        transform_type='val'
+        mode='val'
     )
     
     train_loader = DataLoader(
