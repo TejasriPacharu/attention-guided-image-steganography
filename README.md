@@ -2,7 +2,7 @@
 
 This repository contains the implementation of **"Dynamic Embedding using Attention Heatmaps in Image Steganography"**, a novel approach that extends the CAISFormer architecture by incorporating attention heatmaps of both cover and secret images to guide the embedding process.
 
-## 🎯 Overview
+## Overview
 
 Traditional steganography methods often embed secret information uniformly across the cover image, which can lead to detectable artifacts. Our approach leverages attention mechanisms to identify optimal embedding regions by analyzing both cover and secret images, resulting in:
 
@@ -11,7 +11,7 @@ Traditional steganography methods often embed secret information uniformly acros
 - **Improved security** against steganalysis attacks
 - **Higher quality** secret image recovery
 
-## 🏗️ Architecture
+## Architecture
 
 The system consists of three main components:
 
@@ -23,7 +23,7 @@ The system consists of three main components:
 
 ![Architecture Diagram](docs/architecture.png)
 
-## 🚀 Key Features
+##  Key Features
 
 - **Multiple Attention Mechanisms**: Spatial, channel, edge-based, and texture-based attention
 - **Three Embedding Strategies**:
@@ -34,7 +34,7 @@ The system consists of three main components:
 - **Comprehensive Evaluation**: Security, robustness, and quality metrics
 - **Interactive Demo**: Easy-to-use interface for testing different strategies
 
-## 📋 Requirements
+##  Requirements
 
 ```bash
 torch>=1.9.0
@@ -51,7 +51,7 @@ lpips>=0.1.4
 pytorch-msssim>=0.2.1
 ```
 
-## 🛠️ Installation
+##  Installation
 
 1. Clone the repository:
 ```bash
@@ -73,7 +73,7 @@ mkdir -p data/train data/val data/test
 python utils/dataset.py --data_dir /path/to/images --split
 ```
 
-## 🎮 Quick Start
+##  Quick Start
 
 ### Demo Usage
 
@@ -128,23 +128,9 @@ python evaluate.py \
     --output_dir ./evaluation_results
 ```
 
-## 📊 Results
 
-### Performance Comparison
 
-| Strategy | Cover PSNR | Secret PSNR | Cover SSIM | Secret SSIM |
-|----------|------------|-------------|------------|-------------|
-| Adaptive | 42.15 dB   | 38.92 dB    | 0.9876     | 0.9654      |
-| High-Low | 41.87 dB   | 37.45 dB    | 0.9851     | 0.9532      |
-| Low-High | 40.23 dB   | 39.78 dB    | 0.9798     | 0.9701      |
-
-### Security Analysis
-
-- **Detection Rate**: < 15% against SRNet steganalysis
-- **False Positive Rate**: < 8% for cover images
-- **Security Score**: > 0.85 across all strategies
-
-## 🔧 Configuration
+##  Configuration
 
 ### Training Parameters
 
@@ -160,7 +146,7 @@ python evaluate.py \
 - `--hidden_channels`: Hidden layer channels (default: 64)
 - CAISFormer blocks with configurable attention heads
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 attention-guided-image-steganography/
@@ -182,7 +168,7 @@ attention-guided-image-steganography/
 └── README.md                        # This file
 ```
 
-## 🧪 Attention Strategies
+## Attention Strategies
 
 ### 1. Adaptive Strategy
 Combines multiple attention cues:
@@ -200,7 +186,7 @@ Combines multiple attention cues:
 - Uses high-attention regions of secret image
 - Better for cover image preservation
 
-## 📈 Evaluation Metrics
+## Evaluation Metrics
 
 ### Quality Metrics
 - **PSNR**: Peak Signal-to-Noise Ratio
@@ -218,7 +204,7 @@ Combines multiple attention cues:
 - **Gaussian Blur**: Performance under blurring
 - **Resize Operations**: Robustness to scaling
 
-## 🎨 Visualization Features
+##  Visualization Features
 
 - **Attention Heatmaps**: Visualize attention patterns
 - **Embedding Maps**: Show where secrets are embedded
@@ -226,7 +212,7 @@ Combines multiple attention cues:
 - **Training Curves**: Monitor training progress
 - **Architecture Diagrams**: System overview
 
-## 🔬 Research Applications
+##  Research Applications
 
 This implementation is designed for research in:
 - **Image Steganography**: Novel embedding techniques
@@ -234,42 +220,10 @@ This implementation is designed for research in:
 - **Adversarial Training**: GAN-based steganography
 - **Security Analysis**: Steganalysis resistance
 
-## 📚 Citation
 
-If you use this code in your research, please cite:
-
-```bibtex
-@article{attention_steganography_2024,
-    title={Dynamic Embedding using Attention Heatmaps in Image Steganography},
-    author={[Your Name]},
-    journal={[Journal Name]},
-    year={2024}
-}
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - CAISFormer architecture inspiration
 - SRNet for steganalysis evaluation
 - PyTorch community for excellent deep learning framework
 - Research community for steganography advances
-
-## 📞 Contact
-
-For questions or collaborations, please open an issue or contact [your-email@domain.com].
-
----
-
-**Note**: This implementation is for research purposes. Please ensure compliance with local laws and ethical guidelines when using steganography techniques.
