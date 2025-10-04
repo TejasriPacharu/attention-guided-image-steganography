@@ -375,7 +375,7 @@ class NovelSteganographyTrainer:
             print(f"  ⚠️  Visualization failed: {e}")
 
         def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
-        """Save model checkpoint"""
+            """Save model checkpoint"""
         checkpoint = {
             'epoch': epoch,
             'generator_state_dict': self.generator.state_dict(),
