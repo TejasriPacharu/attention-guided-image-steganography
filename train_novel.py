@@ -222,6 +222,23 @@ class NovelSteganographyTrainer:
             # Training step
             step_losses, results = self.train_step(cover_images, secret_images)
             
+            if batch_idx == 0:
+                sample_cover = cover_images[:1].clone()
+                sample_secret = secret_images[:1].clone()
+                sample_results = {
+                    'stego_image': results['stego_image'][:1].clone(),
+                    'extracted_secret': results['extracted_secret'][:1].clone(),
+                    'cover_attention': {
+                        'embedding_attention': results['cover_attention']['embedding_attention'][:1].clone()
+                    },
+                    'secret_attention': {
+                        'embedding_attention': results['secret_attention']['embedding_attention'][:1].clone()
+                    },
+                    'embedding_map': results['embedding_map'][:1].clone()
+                }
+                if 'fusion_weights' in results:
+                    sample_results['fusion_weights'] = results['fusion_weights'][:1].clone()
+                
             # Accumulate losses
             for key, value in step_losses.items():
                 if key not in epoch_losses:
@@ -253,6 +270,12 @@ class NovelSteganographyTrainer:
         for key in epoch_losses:
             epoch_losses[key] /= num_batches
         
+        # Save training visualizations after epoch - NEW FIX
+        if sample_results is not None and sample_cover is not None and sample_secret is not None:
+            viz_dir = os.path.join(self.args.output_dir, 'visualizations', 'train')
+            os.makedirs(viz_dir, exist_ok=True)
+            self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir, mode='train')
+
         return epoch_losses
     
     def validate(self, dataloader, epoch):
@@ -261,6 +284,11 @@ class NovelSteganographyTrainer:
         
         val_losses = {}
         val_metrics = {'psnr': [], 'ssim': []}
+
+        # Store sample data for visualization
+        sample_results = None
+        sample_cover = None
+        sample_secret = None
         
         with torch.no_grad():
             for cover_images, secret_images in tqdm(dataloader, desc='Validation'):
@@ -274,6 +302,23 @@ class NovelSteganographyTrainer:
                     embedding_strategy=self.args.embedding_strategy
                 )
                 
+                if batch_idx == 0:
+                    sample_cover = cover_images[:1].clone()
+                    sample_secret = secret_images[:1].clone()
+                    sample_results = {
+                        'stego_image': results['stego_image'][:1].clone(),
+                        'extracted_secret': results['extracted_secret'][:1].clone(),
+                        'cover_attention': {
+                            'embedding_attention': results['cover_attention']['embedding_attention'][:1].clone()
+                        },
+                        'secret_attention': {
+                            'embedding_attention': results['secret_attention']['embedding_attention'][:1].clone()
+                        },
+                        'embedding_map': results['embedding_map'][:1].clone()
+                    }
+                    if 'fusion_weights' in results:
+                        sample_results['fusion_weights'] = results['fusion_weights'][:1].clone()
+
                 # Compute losses
                 losses = self.compute_generator_losses(results, cover_images, secret_images)
                 
@@ -307,24 +352,11 @@ class NovelSteganographyTrainer:
                 self.writer.add_scalar(f'Val/{key}', value, epoch)
         
         
-        # Save validation visualizations
-        if self.writer:
-            val_dir = os.path.join(self.args.output_dir, 'visualizations')
-            os.makedirs(val_dir, exist_ok=True)
-            # Use first batch for visualization
-            sample_cover = cover_images[:1] if 'cover_images' in locals() else None
-            sample_secret = secret_images[:1] if 'secret_images' in locals() else None
-            if sample_cover is not None and sample_secret is not None:
-                sample_results = {
-                    'stego_image': results['stego_image'][:1],
-                    'extracted_secret': results['extracted_secret'][:1],
-                    'cover_attention': results['cover_attention'],
-                    'secret_attention': results['secret_attention'],
-                    'embedding_map': results['embedding_map'][:1]
-                }
-                if 'fusion_weights' in results:
-                    sample_results['fusion_weights'] = results['fusion_weights'][:1]
-                self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, val_dir)
+        # Save validation visualizations - FIXED VERSION
+        if sample_results is not None and sample_cover is not None and sample_secret is not None:
+            viz_dir = os.path.join(self.args.output_dir, 'visualizations', 'val')
+            os.makedirs(viz_dir, exist_ok=True)
+            self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir, mode='val')
 
         return val_losses, val_metrics
     
@@ -339,11 +371,11 @@ class NovelSteganographyTrainer:
             print(f"  📊 Saving epoch {epoch} visualizations...")
             
             # Take first sample for visualization
-            sample_cover = cover_images[:1]
-            sample_secret = secret_images[:1]
+            sample_cover = cover_images[:1] if cover_images.shape[0] > 1 else cover_images
+            sample_secret = secret_images[:1] if secret_images.shape[0] > 1 else secret_images
             sample_results = {
-                'stego_image': results['stego_image'][:1],
-                'extracted_secret': results['extracted_secret'][:1],
+                'stego_image': results['stego_image'][:1] if results['stego_image'].shape[0] > 1 else results['stego_image'],
+                'extracted_secret': results['extracted_secret'][:1] if results['extracted_secret'].shape[0] > 1 else results['extracted_secret'],
                 'cover_attention': {
                     'embedding_attention': results['cover_attention']['embedding_attention'][:1]
                 },
@@ -471,8 +503,6 @@ def main():
     
     # Data parameters
     parser.add_argument('--data_dir', type=str, default='./dataset', help='Dataset directory')
-    parser.add_argument('--train_dir', type=str, default='./visualizations/train', help='Visualization directory')
-    parser.add_argument('--val_dir', type=str, default='./visualizations/val', help='Visualization directory')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of workers')
     parser.add_argument('--image_size', type=int, default=256, help='Image size')

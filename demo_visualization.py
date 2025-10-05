@@ -195,9 +195,9 @@ def visualize_comprehensive_attention_analysis(cover_image, secret_image, result
     medium_embed = (embedding_map > 0.3) & (embedding_map <= 0.7)
     low_embed = embedding_map <= 0.3
     
-    axes[1, 1].contour(high_embed.astype(float), levels=[0.5], colors='red', linewidths=2)
-    axes[1, 1].contour(medium_embed.astype(float), levels=[0.5], colors='yellow', linewidths=2)
-    axes[1, 1].contour(low_embed.astype(float), levels=[0.5], colors='blue', linewidths=2)
+    axes[1, 1].contour(high_embed.astype(float), levels=[0.5], colors='r', linewidths=2)
+    axes[1, 1].contour(medium_embed.astype(float), levels=[0.5], colors='y', linewidths=2)
+    axes[1, 1].contour(low_embed.astype(float), levels=[0.5], colors='b', linewidths=2)
     axes[1, 1].set_title('Embedding Regions\n🔴High 🟡Medium 🔵Low')
     axes[1, 1].axis('off')
     
@@ -207,7 +207,7 @@ def visualize_comprehensive_attention_analysis(cover_image, secret_image, result
         
         # Show dominant strategy per pixel
         dominant_strategy = np.argmax(fusion_weights, axis=0)
-        strategy_colors = ['red', 'green', 'blue']  # Texture, Codec, Adversarial
+        strategy_colors = ['r', 'g', 'b']  # Texture, Codec, Adversarial
         strategy_names = ['Texture', 'Codec', 'Adversarial']
         
         # Create RGB image showing dominant strategy
@@ -228,7 +228,7 @@ def visualize_comprehensive_attention_analysis(cover_image, secret_image, result
         axes[1, 2].axis('off')
     
     # Embedding strength histogram
-    axes[1, 3].hist(embedding_map.flatten(), bins=50, alpha=0.7, color='viridis')
+    axes[1, 3].hist(embedding_map.flatten(), bins=50, alpha=0.7, color='#440154')  # dark purple from viridis
     axes[1, 3].set_title('Embedding Strength\nDistribution')
     axes[1, 3].set_xlabel('Embedding Strength')
     axes[1, 3].set_ylabel('Pixel Count')
@@ -375,7 +375,6 @@ def main():
     
     # Create output directory
     output_dir = './visualizations'
-    embeddin
     os.makedirs(output_dir, exist_ok=True)
     
     # Create sample data
