@@ -143,11 +143,8 @@ class NovelSteganographyTrainer:
         batch_size = cover_images.size(0)
         
         # Labels for discriminator
-        real_labels = torch.ones(batch_size, 1, device=self.device)
-        fake_labels = torch.zeros(batch_size, 1, device=self.device)
-        
-        real_labels = real_labels.long()
-        fake_labels = fake_labels.long()
+        real_labels = torch.zeros(batch_size, dtype=torch.long, device=self.device)  # Class 0 = real
+        fake_labels = torch.ones(batch_size, dtype=torch.long, device=self.device)   # Class 1 = fake
         
         # =================== Train Generator ===================
         self.gen_optimizer.zero_grad()
