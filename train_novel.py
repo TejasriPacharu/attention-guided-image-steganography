@@ -67,7 +67,7 @@ class NovelSteganographyTrainer:
         # Loss functions
         self.mse_loss = nn.MSELoss()
         self.l1_loss = nn.L1Loss()
-        self.bce_loss = nn.BCEWithLogitsLoss()
+        self.ce_loss = nn.CrossEntropyLoss()
         
         # Perceptual loss (VGG-based)
         try:
@@ -113,7 +113,7 @@ class NovelSteganographyTrainer:
         # 4. Attention consistency loss
         if 'attention_consistency' in results and results['attention_consistency'] is not None:
             target_consistency = torch.ones_like(results['attention_consistency'])
-            losses['attention_consistency_loss'] = self.bce_loss(
+            losses['attention_consistency_loss'] = self.ce_loss(
                 results['attention_consistency'], target_consistency
             )
         else:
@@ -146,6 +146,9 @@ class NovelSteganographyTrainer:
         real_labels = torch.ones(batch_size, 1, device=self.device)
         fake_labels = torch.zeros(batch_size, 1, device=self.device)
         
+        real_labels = real_labels.long()
+        fake_labels = fake_labels.long()
+        
         # =================== Train Generator ===================
         self.gen_optimizer.zero_grad()
         
@@ -158,11 +161,14 @@ class NovelSteganographyTrainer:
         
         # Compute generator losses
         gen_losses = self.compute_generator_losses(gen_results, cover_images, secret_images)
-        
-        # Adversarial loss for generator
+
+        # Adversarial loss for generator (want discriminator to think fake images are real)
         disc_fake = self.discriminator(gen_results['stego_image'])
         disc_fake_logits = disc_fake['logits'] if isinstance(disc_fake, dict) else disc_fake
-        gen_losses['adversarial_loss'] = self.bce_loss(disc_fake_logits, real_labels)
+
+        print("disc_fake_logits.shape: ", disc_fake_logits.shape, disc_fake_logits.dtype)
+        print(" real_labels.shape: ", real_labels.shape, real_labels.dtype)
+        gen_losses['adversarial_loss'] = self.ce_loss(disc_fake_logits, real_labels)  # Want to fool discriminator
         
         # Total generator loss
         total_gen_loss = (
@@ -183,11 +189,11 @@ class NovelSteganographyTrainer:
         
         # Real images
         disc_real = self.discriminator(cover_images)
-        real_loss = self.bce_loss(disc_real, real_labels)
+        real_loss = self.ce_loss(disc_real['logits'] if isinstance(disc_real, dict) else disc_real, real_labels)
         
         # Fake images (detached to avoid generator gradients)
         disc_fake = self.discriminator(gen_results['stego_image'].detach())
-        fake_loss = self.bce_loss(disc_fake, fake_labels)
+        fake_loss = self.ce_loss(disc_fake['logits'] if isinstance(disc_fake, dict) else disc_fake, fake_labels)
         
         # Total discriminator loss
         disc_loss = (real_loss + fake_loss) / 2
