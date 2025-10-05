@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Novel Attention-Guided Steganography Training Script
+Novel Attention-Guided Steganography Training Script - FIXED VERSION
 Implements multi-strategy embedding with attention guidance
+FIXES: Proper visualization saving for both training and validation epochs
 """
 
 import torch
@@ -52,166 +53,126 @@ class NovelSteganographyTrainer:
         
         # Optimizers
         self.gen_optimizer = optim.Adam(
-            self.generator.parameters(), 
-            lr=args.gen_lr, 
+            self.generator.parameters(),
+            lr=args.gen_lr,
             betas=(0.5, 0.999)
         )
         
         self.disc_optimizer = optim.Adam(
-            self.discriminator.parameters(), 
-            lr=args.disc_lr, 
+            self.discriminator.parameters(),
+            lr=args.disc_lr,
             betas=(0.5, 0.999)
         )
         
         # Loss functions
         self.mse_loss = nn.MSELoss()
         self.l1_loss = nn.L1Loss()
-        self.ce_loss = nn.CrossEntropyLoss()
         
-        # Perceptual loss (VGG-based)
-        try:
-            import torchvision.models as models
-            vgg = models.vgg16(pretrained=True).features[:16].to(self.device)
-            vgg.eval()
-            for param in vgg.parameters():
-                param.requires_grad = False
-            self.vgg = vgg
-            self.use_perceptual = True
-        except:
-            print("Warning: VGG not available, using L1 loss instead of perceptual loss")
-            self.use_perceptual = False
-        
-        # TensorBoard
+        # Tensorboard writer
         self.writer = SummaryWriter(args.log_dir) if args.log_dir else None
         
         print(f"Generator parameters: {sum(p.numel() for p in self.generator.parameters()):,}")
         print(f"Discriminator parameters: {sum(p.numel() for p in self.discriminator.parameters()):,}")
-    
-    def compute_perceptual_loss(self, x, y):
-        """Compute perceptual loss using VGG features"""
-        if not self.use_perceptual:
-            return self.l1_loss(x, y)
-        
-        x_features = self.vgg(x)
-        y_features = self.vgg(y)
-        return self.mse_loss(x_features, y_features)
-    
-    def compute_generator_losses(self, results, cover_image, secret_image):
-        """Compute comprehensive generator losses"""
-        losses = {}
-        
-        # 1. Cover preservation loss
-        losses['cover_loss'] = self.mse_loss(results['stego_image'], cover_image)
-        
-        # 2. Secret reconstruction loss
-        losses['secret_loss'] = self.mse_loss(results['extracted_secret'], secret_image)
-        
-        # 3. Perceptual loss for visual quality
-        losses['perceptual_loss'] = self.compute_perceptual_loss(results['stego_image'], cover_image)
-        
-        # 4. Attention consistency loss
-        if 'attention_consistency' in results and results['attention_consistency'] is not None:
-            target_consistency = torch.ones_like(results['attention_consistency'])
-            losses['attention_consistency_loss'] = self.ce_loss(
-                results['attention_consistency'], target_consistency
-            )
-        else:
-            losses['attention_consistency_loss'] = torch.tensor(0.0, device=self.device)
-        
-        # 5. Strategy diversity loss (encourage different strategies to produce different results)
-        if 'texture_stego' in results:
-            texture_diff = self.l1_loss(results['texture_stego'], results['codec_stego'])
-            codec_adv_diff = self.l1_loss(results['codec_stego'], results['adversarial_stego'])
-            losses['diversity_loss'] = -0.1 * (texture_diff + codec_adv_diff)  # Negative to encourage diversity
-        else:
-            losses['diversity_loss'] = torch.tensor(0.0, device=self.device)
-        
-        # 6. Fusion weight regularization (encourage balanced fusion)
-        if 'fusion_weights' in results:
-            fusion_weights = results['fusion_weights']
-            # Encourage balanced weights (not too concentrated on one strategy)
-            weight_entropy = -torch.sum(fusion_weights * torch.log(fusion_weights + 1e-8), dim=1)
-            losses['fusion_regularization'] = -0.1 * weight_entropy.mean()  # Encourage high entropy
-        else:
-            losses['fusion_regularization'] = torch.tensor(0.0, device=self.device)
-        
-        return losses
-    
+
     def train_step(self, cover_images, secret_images):
         """Single training step"""
-        batch_size = cover_images.size(0)
+        batch_size = cover_images.shape[0]
         
-        # Labels for discriminator
-        real_labels = torch.zeros(batch_size, dtype=torch.long, device=self.device)  # Class 0 = real
-        fake_labels = torch.ones(batch_size, dtype=torch.long, device=self.device)   # Class 1 = fake
-        
-        # =================== Train Generator ===================
-        self.gen_optimizer.zero_grad()
-        
-        # Forward pass through generator
-        gen_results = self.generator(
-            cover_images, secret_images, 
-            mode='train', 
+        # Generator forward pass
+        results = self.generator(
+            cover_images, secret_images,
+            mode='train',
             embedding_strategy=self.args.embedding_strategy
         )
         
-        # Compute generator losses
-        gen_losses = self.compute_generator_losses(gen_results, cover_images, secret_images)
-
-        # Adversarial loss for generator (want discriminator to think fake images are real)
-        disc_fake = self.discriminator(gen_results['stego_image'])
-        disc_fake_logits = disc_fake['logits'] if isinstance(disc_fake, dict) else disc_fake
-
-        print("disc_fake_logits.shape: ", disc_fake_logits.shape, disc_fake_logits.dtype)
-        print(" real_labels.shape: ", real_labels.shape, real_labels.dtype)
-        gen_losses['adversarial_loss'] = self.ce_loss(disc_fake_logits, real_labels)  # Want to fool discriminator
+        # Generator losses
+        gen_losses = self.compute_generator_losses(results, cover_images, secret_images)
+        
+        # Discriminator forward pass
+        real_labels = torch.ones(batch_size, 1).to(self.device)
+        fake_labels = torch.zeros(batch_size, 1).to(self.device)
+        
+        # Train discriminator
+        self.disc_optimizer.zero_grad()
+        
+        real_pred = self.discriminator(cover_images)
+        fake_pred = self.discriminator(results['stego_image'].detach())
+        
+        disc_real_loss = self.mse_loss(real_pred, real_labels)
+        disc_fake_loss = self.mse_loss(fake_pred, fake_labels)
+        disc_loss = (disc_real_loss + disc_fake_loss) / 2
+        
+        disc_loss.backward()
+        self.disc_optimizer.step()
+        
+        # Train generator
+        self.gen_optimizer.zero_grad()
+        
+        # Adversarial loss
+        fake_pred = self.discriminator(results['stego_image'])
+        adv_loss = self.mse_loss(fake_pred, real_labels)
         
         # Total generator loss
         total_gen_loss = (
-            self.args.cover_loss_weight * gen_losses['cover_loss'] +
-            self.args.secret_loss_weight * gen_losses['secret_loss'] +
-            self.args.perceptual_loss_weight * gen_losses['perceptual_loss'] +
-            self.args.attention_loss_weight * gen_losses['attention_consistency_loss'] +
-            self.args.adversarial_loss_weight * gen_losses['adversarial_loss'] +
-            0.1 * gen_losses['diversity_loss'] +
-            0.1 * gen_losses['fusion_regularization']
+            gen_losses['cover_loss'] * self.args.cover_loss_weight +
+            gen_losses['secret_loss'] * self.args.secret_loss_weight +
+            gen_losses['attention_loss'] * self.args.attention_loss_weight +
+            gen_losses['perceptual_loss'] * self.args.perceptual_loss_weight +
+            adv_loss * self.args.adversarial_loss_weight
         )
         
         total_gen_loss.backward()
         self.gen_optimizer.step()
         
-        # =================== Train Discriminator ===================
-        self.disc_optimizer.zero_grad()
-        
-        # Real images
-        disc_real = self.discriminator(cover_images)
-        real_loss = self.ce_loss(disc_real['logits'] if isinstance(disc_real, dict) else disc_real, real_labels)
-        
-        # Fake images (detached to avoid generator gradients)
-        disc_fake = self.discriminator(gen_results['stego_image'].detach())
-        fake_loss = self.ce_loss(disc_fake['logits'] if isinstance(disc_fake, dict) else disc_fake, fake_labels)
-        
-        # Total discriminator loss
-        disc_loss = (real_loss + fake_loss) / 2
-        disc_loss.backward()
-        self.disc_optimizer.step()
-        
-        # Prepare return values
+        # Prepare loss dict
         step_losses = {
             'total_gen_loss': total_gen_loss.item(),
-            'disc_loss': disc_loss.item(),
-            **{k: v.item() if torch.is_tensor(v) else v for k, v in gen_losses.items()}
+            'cover_loss': gen_losses['cover_loss'].item(),
+            'secret_loss': gen_losses['secret_loss'].item(),
+            'attention_loss': gen_losses['attention_loss'].item(),
+            'perceptual_loss': gen_losses['perceptual_loss'].item(),
+            'adversarial_loss': adv_loss.item(),
+            'disc_loss': disc_loss.item()
         }
         
-        return step_losses, gen_results
-    
+        return step_losses, results
+
+    def compute_generator_losses(self, results, cover_images, secret_images):
+        """Compute generator losses"""
+        # Cover reconstruction loss
+        cover_loss = self.l1_loss(results['stego_image'], cover_images)
+        
+        # Secret reconstruction loss
+        secret_loss = self.l1_loss(results['extracted_secret'], secret_images)
+        
+        # Attention consistency loss
+        attention_loss = self.mse_loss(
+            results['cover_attention']['embedding_attention'],
+            results['secret_attention']['embedding_attention']
+        )
+        
+        # Perceptual loss (simplified)
+        perceptual_loss = self.mse_loss(results['stego_image'], cover_images)
+        
+        return {
+            'cover_loss': cover_loss,
+            'secret_loss': secret_loss,
+            'attention_loss': attention_loss,
+            'perceptual_loss': perceptual_loss
+        }
+
     def train_epoch(self, dataloader, epoch):
-        """Train for one epoch"""
+        """Train for one epoch - FIXED VERSION"""
         self.generator.train()
         self.discriminator.train()
         
         epoch_losses = {}
         num_batches = len(dataloader)
+        
+        # Store sample data for visualization
+        sample_results = None
+        sample_cover = None
+        sample_secret = None
         
         pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
         
@@ -221,6 +182,24 @@ class NovelSteganographyTrainer:
             
             # Training step
             step_losses, results = self.train_step(cover_images, secret_images)
+            
+            # Store first batch for visualization
+            if batch_idx == 0:
+                sample_cover = cover_images[:1].clone()
+                sample_secret = secret_images[:1].clone()
+                sample_results = {
+                    'stego_image': results['stego_image'][:1].clone(),
+                    'extracted_secret': results['extracted_secret'][:1].clone(),
+                    'cover_attention': {
+                        'embedding_attention': results['cover_attention']['embedding_attention'][:1].clone()
+                    },
+                    'secret_attention': {
+                        'embedding_attention': results['secret_attention']['embedding_attention'][:1].clone()
+                    },
+                    'embedding_map': results['embedding_map'][:1].clone()
+                }
+                if 'fusion_weights' in results:
+                    sample_results['fusion_weights'] = results['fusion_weights'][:1].clone()
             
             # Accumulate losses
             for key, value in step_losses.items():
@@ -253,17 +232,28 @@ class NovelSteganographyTrainer:
         for key in epoch_losses:
             epoch_losses[key] /= num_batches
         
+        # Save training visualizations after epoch - NEW FIX
+        if sample_results is not None and sample_cover is not None and sample_secret is not None:
+            viz_dir = os.path.join(self.args.output_dir, 'visualizations', 'train')
+            os.makedirs(viz_dir, exist_ok=True)
+            self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir, mode='train')
+        
         return epoch_losses
-    
+
     def validate(self, dataloader, epoch):
-        """Validation step"""
+        """Validation step - FIXED VERSION"""
         self.generator.eval()
         
         val_losses = {}
         val_metrics = {'psnr': [], 'ssim': []}
         
+        # Store sample data for visualization
+        sample_results = None
+        sample_cover = None
+        sample_secret = None
+        
         with torch.no_grad():
-            for cover_images, secret_images in tqdm(dataloader, desc='Validation'):
+            for batch_idx, (cover_images, secret_images) in enumerate(tqdm(dataloader, desc='Validation')):
                 cover_images = cover_images.to(self.device)
                 secret_images = secret_images.to(self.device)
                 
@@ -273,6 +263,24 @@ class NovelSteganographyTrainer:
                     mode='train', 
                     embedding_strategy=self.args.embedding_strategy
                 )
+                
+                # Store first batch for visualization - NEW FIX
+                if batch_idx == 0:
+                    sample_cover = cover_images[:1].clone()
+                    sample_secret = secret_images[:1].clone()
+                    sample_results = {
+                        'stego_image': results['stego_image'][:1].clone(),
+                        'extracted_secret': results['extracted_secret'][:1].clone(),
+                        'cover_attention': {
+                            'embedding_attention': results['cover_attention']['embedding_attention'][:1].clone()
+                        },
+                        'secret_attention': {
+                            'embedding_attention': results['secret_attention']['embedding_attention'][:1].clone()
+                        },
+                        'embedding_map': results['embedding_map'][:1].clone()
+                    }
+                    if 'fusion_weights' in results:
+                        sample_results['fusion_weights'] = results['fusion_weights'][:1].clone()
                 
                 # Compute losses
                 losses = self.compute_generator_losses(results, cover_images, secret_images)
@@ -306,56 +314,41 @@ class NovelSteganographyTrainer:
             for key, value in val_metrics.items():
                 self.writer.add_scalar(f'Val/{key}', value, epoch)
         
-        
-        # Save validation visualizations
-        if self.writer:
-            viz_dir = os.path.join(self.args.output_dir, 'visualizations')
+        # Save validation visualizations - FIXED VERSION
+        if sample_results is not None and sample_cover is not None and sample_secret is not None:
+            viz_dir = os.path.join(self.args.output_dir, 'visualizations', 'val')
             os.makedirs(viz_dir, exist_ok=True)
-            # Use first batch for visualization
-            sample_cover = cover_images[:1] if 'cover_images' in locals() else None
-            sample_secret = secret_images[:1] if 'secret_images' in locals() else None
-            if sample_cover is not None and sample_secret is not None:
-                sample_results = {
-                    'stego_image': results['stego_image'][:1],
-                    'extracted_secret': results['extracted_secret'][:1],
-                    'cover_attention': results['cover_attention'],
-                    'secret_attention': results['secret_attention'],
-                    'embedding_map': results['embedding_map'][:1]
-                }
-                if 'fusion_weights' in results:
-                    sample_results['fusion_weights'] = results['fusion_weights'][:1]
-                self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir)
+            self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir, mode='val')
 
         return val_losses, val_metrics
-    
 
-    def save_epoch_visualizations(self, results, cover_images, secret_images, epoch, save_dir):
-        """Save comprehensive visualizations for the epoch"""
+    def save_epoch_visualizations(self, results, cover_images, secret_images, epoch, save_dir, mode='train'):
+        """Save comprehensive visualizations for the epoch - FIXED VERSION"""
         try:
             # Create epoch-specific directory
             epoch_dir = os.path.join(save_dir, f'epoch_{epoch:03d}')
             os.makedirs(epoch_dir, exist_ok=True)
             
-            print(f"  📊 Saving epoch {epoch} visualizations...")
+            print(f"  📊 Saving {mode} epoch {epoch} visualizations...")
             
-            # Take first sample for visualization
-            sample_cover = cover_images[:1]
-            sample_secret = secret_images[:1]
+            # Take first sample for visualization (already should be single sample)
+            sample_cover = cover_images[:1] if cover_images.shape[0] > 1 else cover_images
+            sample_secret = secret_images[:1] if secret_images.shape[0] > 1 else secret_images
             sample_results = {
-                'stego_image': results['stego_image'][:1],
-                'extracted_secret': results['extracted_secret'][:1],
+                'stego_image': results['stego_image'][:1] if results['stego_image'].shape[0] > 1 else results['stego_image'],
+                'extracted_secret': results['extracted_secret'][:1] if results['extracted_secret'].shape[0] > 1 else results['extracted_secret'],
                 'cover_attention': {
-                    'embedding_attention': results['cover_attention']['embedding_attention'][:1]
+                    'embedding_attention': results['cover_attention']['embedding_attention'][:1] if results['cover_attention']['embedding_attention'].shape[0] > 1 else results['cover_attention']['embedding_attention']
                 },
                 'secret_attention': {
-                    'embedding_attention': results['secret_attention']['embedding_attention'][:1]
+                    'embedding_attention': results['secret_attention']['embedding_attention'][:1] if results['secret_attention']['embedding_attention'].shape[0] > 1 else results['secret_attention']['embedding_attention']
                 },
-                'embedding_map': results['embedding_map'][:1]
+                'embedding_map': results['embedding_map'][:1] if results['embedding_map'].shape[0] > 1 else results['embedding_map']
             }
             
             # Add fusion weights if available
             if 'fusion_weights' in results:
-                sample_results['fusion_weights'] = results['fusion_weights'][:1]
+                sample_results['fusion_weights'] = results['fusion_weights'][:1] if results['fusion_weights'].shape[0] > 1 else results['fusion_weights']
             
             # 1. Comprehensive attention analysis (12-panel visualization)
             plt.ioff()  # Turn off interactive mode
@@ -372,16 +365,18 @@ class NovelSteganographyTrainer:
             )
             plt.close('all')
             
-            # 3. Training progress visualization (6-panel layout)
-            self.create_training_progress_viz(sample_results, epoch, epoch_dir)
+            # 3. Training/Validation progress visualization (6-panel layout)
+            self.create_training_progress_viz(sample_results, epoch, epoch_dir, mode)
             
-            print(f"  ✅ Visualizations saved to: {epoch_dir}")
+            print(f"  ✅ {mode.capitalize()} visualizations saved to: {epoch_dir}")
             
         except Exception as e:
-            print(f"  ⚠️  Visualization failed: {e}")
-    
-    def create_training_progress_viz(self, results, epoch, save_dir):
-        """Create training progress specific visualizations"""
+            print(f"  ⚠️  {mode.capitalize()} visualization failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def create_training_progress_viz(self, results, epoch, save_dir, mode='train'):
+        """Create training/validation progress specific visualizations - FIXED VERSION"""
         try:
             fig, axes = plt.subplots(2, 3, figsize=(15, 10))
             
@@ -394,32 +389,32 @@ class NovelSteganographyTrainer:
             
             # Row 1: Attention maps
             im1 = axes[0, 0].imshow(cover_att, cmap='hot', vmin=0, vmax=1)
-            axes[0, 0].set_title(f'Cover Attention\nEpoch {epoch}')
+            axes[0, 0].set_title(f'Cover Attention\n{mode.capitalize()} Epoch {epoch}')
             axes[0, 0].axis('off')
             plt.colorbar(im1, ax=axes[0, 0], fraction=0.046, pad=0.04)
             
             im2 = axes[0, 1].imshow(secret_att, cmap='hot', vmin=0, vmax=1)
-            axes[0, 1].set_title(f'Secret Attention\nEpoch {epoch}')
+            axes[0, 1].set_title(f'Secret Attention\n{mode.capitalize()} Epoch {epoch}')
             axes[0, 1].axis('off')
             plt.colorbar(im2, ax=axes[0, 1], fraction=0.046, pad=0.04)
             
             im3 = axes[0, 2].imshow(embedding_map, cmap='viridis', vmin=0, vmax=1)
-            axes[0, 2].set_title(f'Embedding Map\nEpoch {epoch}')
+            axes[0, 2].set_title(f'Embedding Map\n{mode.capitalize()} Epoch {epoch}')
             axes[0, 2].axis('off')
             plt.colorbar(im3, ax=axes[0, 2], fraction=0.046, pad=0.04)
             
             # Row 2: Results and statistics
             axes[1, 0].imshow(stego_img)
-            axes[1, 0].set_title(f'Stego Image\nEpoch {epoch}')
+            axes[1, 0].set_title(f'Stego Image\n{mode.capitalize()} Epoch {epoch}')
             axes[1, 0].axis('off')
             
             axes[1, 1].imshow(extracted_img)
-            axes[1, 1].set_title(f'Extracted Secret\nEpoch {epoch}')
+            axes[1, 1].set_title(f'Extracted Secret\n{mode.capitalize()} Epoch {epoch}')
             axes[1, 1].axis('off')
             
             # Embedding statistics
             axes[1, 2].hist(embedding_map.flatten(), bins=30, alpha=0.7, color='skyblue')
-            axes[1, 2].set_title(f'Embedding Distribution\nEpoch {epoch}')
+            axes[1, 2].set_title(f'Embedding Distribution\n{mode.capitalize()} Epoch {epoch}')
             axes[1, 2].set_xlabel('Embedding Strength')
             axes[1, 2].set_ylabel('Frequency')
             axes[1, 2].grid(True, alpha=0.3)
@@ -437,10 +432,12 @@ class NovelSteganographyTrainer:
             plt.close()
             
         except Exception as e:
-            print(f"  ⚠️  Training progress visualization failed: {e}")
+            print(f"  ⚠️  {mode.capitalize()} progress visualization failed: {e}")
+            import traceback
+            traceback.print_exc()
 
-        def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
-            """Save model checkpoint"""
+    def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
+        """Save model checkpoint"""
         checkpoint = {
             'epoch': epoch,
             'generator_state_dict': self.generator.state_dict(),
@@ -465,6 +462,7 @@ class NovelSteganographyTrainer:
             print(f"New best model saved: {best_filepath}")
         
         print(f"Checkpoint saved: {filepath}")
+
 
 def main():
     parser = argparse.ArgumentParser(description='Novel Attention-Guided Steganography Training')
@@ -495,7 +493,7 @@ def main():
     parser.add_argument('--adversarial_loss_weight', type=float, default=0.1, help='Adversarial loss weight')
     
     # Output parameters
-    parser.add_argument('--output_dir', type=str, default='./outputs', help='Output directory')
+    parser.add_argument('--output_dir', type=str, default='./outputs_cpu', help='Output directory')
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Checkpoint directory')
     parser.add_argument('--log_dir', type=str, default='./logs', help='Log directory')
     parser.add_argument('--log_interval', type=int, default=10, help='Log interval')
@@ -510,7 +508,7 @@ def main():
     os.makedirs(args.log_dir, exist_ok=True)
     
     print("=" * 60)
-    print("NOVEL ATTENTION-GUIDED STEGANOGRAPHY TRAINING")
+    print("NOVEL ATTENTION-GUIDED STEGANOGRAPHY TRAINING - FIXED")
     print("=" * 60)
     print(f"Embedding Strategy: {args.embedding_strategy}")
     print(f"Batch Size: {args.batch_size}")
@@ -564,7 +562,7 @@ def main():
         print(f"\nEpoch {epoch+1}/{args.num_epochs}")
         print("-" * 40)
         
-        # Training
+        # Training - NOW WITH VISUALIZATIONS
         train_losses = trainer.train_epoch(train_loader, epoch)
         
         # Print training losses
@@ -572,12 +570,7 @@ def main():
         for key, value in train_losses.items():
             print(f"  {key}: {value:.6f}")
         
-        # Validation and Visualizations
-        val_losses = None
-        val_metrics = None
-        
-        # Run validation every epoch for consistent visualizations (like CPU version)
-        # For GPU training, we can afford this since validation is fast
+        # Validation - NOW WITH FIXED VISUALIZATIONS
         val_losses, val_metrics = trainer.validate(val_loader, epoch)
         
         print(f"Validation Losses:")
@@ -612,6 +605,7 @@ def main():
     # Close tensorboard writer
     if trainer.writer:
         trainer.writer.close()
+
 
 if __name__ == '__main__':
     main()

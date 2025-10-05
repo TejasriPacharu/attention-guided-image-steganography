@@ -68,7 +68,7 @@ def visualize_embedding_map_basic(embedding_map, save_path=None):
     Basic embedding map visualization
     Shows the spatial distribution of embedding strength
     """
-    print("🎯 Basic Embedding Map Visualization")
+    print("Basic Embedding Map Visualization")
     
     # Convert to numpy
     embed_np = tensor_to_numpy(embedding_map, squeeze=True)
@@ -99,7 +99,7 @@ def visualize_embedding_map_basic(embedding_map, save_path=None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"  💾 Saved to: {save_path}")
+        print(f"  Saved to: {save_path}")
     plt.show()
 
 def visualize_attention_overlay(cover_image, embedding_map, save_path=None):
@@ -107,7 +107,7 @@ def visualize_attention_overlay(cover_image, embedding_map, save_path=None):
     Visualize embedding map overlayed on cover image
     Shows WHERE the embedding will occur
     """
-    print("🎯 Attention Overlay Visualization")
+    print("Attention Overlay Visualization")
     
     # Convert to numpy
     cover_np = tensor_to_numpy(cover_image)
@@ -141,14 +141,14 @@ def visualize_attention_overlay(cover_image, embedding_map, save_path=None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"  💾 Saved to: {save_path}")
+        print(f"  Saved to: {save_path}")
     plt.show()
 
 def visualize_comprehensive_attention_analysis(cover_image, secret_image, results, save_path=None):
     """
     Comprehensive visualization showing all attention components
     """
-    print("🎯 Comprehensive Attention Analysis")
+    print("Comprehensive Attention Analysis")
     
     # Extract data
     cover_img = tensor_to_numpy(cover_image)
@@ -276,14 +276,14 @@ def visualize_comprehensive_attention_analysis(cover_image, secret_image, result
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"  💾 Saved to: {save_path}")
+        print(f" Saved to: {save_path}")
     plt.show()
 
 def visualize_embedding_statistics(embedding_map, save_path=None):
     """
     Visualize statistical properties of embedding map
     """
-    print("🎯 Embedding Map Statistics")
+    print("Embedding Map Statistics")
     
     embed_np = tensor_to_numpy(embedding_map, squeeze=True)
     
@@ -375,6 +375,7 @@ def main():
     
     # Create output directory
     output_dir = './visualizations'
+    embeddin
     os.makedirs(output_dir, exist_ok=True)
     
     # Create sample data
