@@ -309,8 +309,8 @@ class NovelSteganographyTrainer:
         
         # Save validation visualizations
         if self.writer:
-            viz_dir = os.path.join(self.args.output_dir, 'visualizations')
-            os.makedirs(viz_dir, exist_ok=True)
+            val_dir = os.path.join(self.args.output_dir, 'visualizations')
+            os.makedirs(val_dir, exist_ok=True)
             # Use first batch for visualization
             sample_cover = cover_images[:1] if 'cover_images' in locals() else None
             sample_secret = secret_images[:1] if 'secret_images' in locals() else None
@@ -324,7 +324,7 @@ class NovelSteganographyTrainer:
                 }
                 if 'fusion_weights' in results:
                     sample_results['fusion_weights'] = results['fusion_weights'][:1]
-                self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, viz_dir)
+                self.save_epoch_visualizations(sample_results, sample_cover, sample_secret, epoch, val_dir)
 
         return val_losses, val_metrics
     
@@ -441,36 +441,38 @@ class NovelSteganographyTrainer:
 
         def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
             """Save model checkpoint"""
-        checkpoint = {
-            'epoch': epoch,
-            'generator_state_dict': self.generator.state_dict(),
-            'discriminator_state_dict': self.discriminator.state_dict(),
-            'gen_optimizer_state_dict': self.gen_optimizer.state_dict(),
-            'disc_optimizer_state_dict': self.disc_optimizer.state_dict(),
-            'train_losses': train_losses,
-            'val_losses': val_losses,
-            'val_metrics': val_metrics,
-            'args': self.args
-        }
-        
-        # Save regular checkpoint
-        filename = f'checkpoint_epoch_{epoch}.pth'
-        filepath = os.path.join(self.args.checkpoint_dir, filename)
-        torch.save(checkpoint, filepath)
-        
-        # Save best model
-        if is_best:
-            best_filepath = os.path.join(self.args.checkpoint_dir, 'best_model.pth')
-            torch.save(checkpoint, best_filepath)
-            print(f"New best model saved: {best_filepath}")
-        
-        print(f"Checkpoint saved: {filepath}")
+            checkpoint = {
+                'epoch': epoch,
+                'generator_state_dict': self.generator.state_dict(),
+                'discriminator_state_dict': self.discriminator.state_dict(),
+                'gen_optimizer_state_dict': self.gen_optimizer.state_dict(),
+                'disc_optimizer_state_dict': self.disc_optimizer.state_dict(),
+                'train_losses': train_losses,
+                'val_losses': val_losses,
+                'val_metrics': val_metrics,
+                'args': self.args
+            }
+            
+            # Save regular checkpoint
+            filename = f'checkpoint_epoch_{epoch}.pth'
+            filepath = os.path.join(self.args.checkpoint_dir, filename)
+            torch.save(checkpoint, filepath)
+            
+            # Save best model
+            if is_best:
+                best_filepath = os.path.join(self.args.checkpoint_dir, 'best_model.pth')
+                torch.save(checkpoint, best_filepath)
+                print(f"New best model saved: {best_filepath}")
+            
+            print(f"Checkpoint saved: {filepath}")
 
 def main():
     parser = argparse.ArgumentParser(description='Novel Attention-Guided Steganography Training')
     
     # Data parameters
     parser.add_argument('--data_dir', type=str, default='./dataset', help='Dataset directory')
+    parser.add_argument('--train_dir', type=str, default='./visualizations/train', help='Visualization directory')
+    parser.add_argument('--val_dir', type=str, default='./visualizations/val', help='Visualization directory')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of workers')
     parser.add_argument('--image_size', type=int, default=256, help='Image size')
