@@ -21,7 +21,6 @@ from models.attention_guided_steganography import AttentionGuidedSteganography
 from models.discriminator import SRNetDiscriminator
 from utils.dataset import SteganographyDataset
 from utils.metrics import compute_metrics
-from utils.visualization import save_attention_visualizations
 
 # Import comprehensive visualization functions
 import matplotlib.pyplot as plt
@@ -358,7 +357,7 @@ class NovelSteganographyTrainer:
             if 'fusion_weights' in results:
                 sample_results['fusion_weights'] = results['fusion_weights'][:1]
             
-            # 1. Comprehensive attention analysis
+            # 1. Comprehensive attention analysis (12-panel visualization)
             plt.ioff()  # Turn off interactive mode
             visualize_comprehensive_attention_analysis(
                 sample_cover, sample_secret, sample_results,
@@ -373,10 +372,72 @@ class NovelSteganographyTrainer:
             )
             plt.close('all')
             
+            # 3. Training progress visualization (6-panel layout)
+            self.create_training_progress_viz(sample_results, epoch, epoch_dir)
+            
             print(f"  ✅ Visualizations saved to: {epoch_dir}")
             
         except Exception as e:
             print(f"  ⚠️  Visualization failed: {e}")
+    
+    def create_training_progress_viz(self, results, epoch, save_dir):
+        """Create training progress specific visualizations"""
+        try:
+            fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+            
+            # Extract data
+            cover_att = tensor_to_numpy(results['cover_attention']['embedding_attention'], squeeze=True)
+            secret_att = tensor_to_numpy(results['secret_attention']['embedding_attention'], squeeze=True)
+            embedding_map = tensor_to_numpy(results['embedding_map'], squeeze=True)
+            stego_img = tensor_to_numpy(results['stego_image'])
+            extracted_img = tensor_to_numpy(results['extracted_secret'])
+            
+            # Row 1: Attention maps
+            im1 = axes[0, 0].imshow(cover_att, cmap='hot', vmin=0, vmax=1)
+            axes[0, 0].set_title(f'Cover Attention\nEpoch {epoch}')
+            axes[0, 0].axis('off')
+            plt.colorbar(im1, ax=axes[0, 0], fraction=0.046, pad=0.04)
+            
+            im2 = axes[0, 1].imshow(secret_att, cmap='hot', vmin=0, vmax=1)
+            axes[0, 1].set_title(f'Secret Attention\nEpoch {epoch}')
+            axes[0, 1].axis('off')
+            plt.colorbar(im2, ax=axes[0, 1], fraction=0.046, pad=0.04)
+            
+            im3 = axes[0, 2].imshow(embedding_map, cmap='viridis', vmin=0, vmax=1)
+            axes[0, 2].set_title(f'Embedding Map\nEpoch {epoch}')
+            axes[0, 2].axis('off')
+            plt.colorbar(im3, ax=axes[0, 2], fraction=0.046, pad=0.04)
+            
+            # Row 2: Results and statistics
+            axes[1, 0].imshow(stego_img)
+            axes[1, 0].set_title(f'Stego Image\nEpoch {epoch}')
+            axes[1, 0].axis('off')
+            
+            axes[1, 1].imshow(extracted_img)
+            axes[1, 1].set_title(f'Extracted Secret\nEpoch {epoch}')
+            axes[1, 1].axis('off')
+            
+            # Embedding statistics
+            axes[1, 2].hist(embedding_map.flatten(), bins=30, alpha=0.7, color='skyblue')
+            axes[1, 2].set_title(f'Embedding Distribution\nEpoch {epoch}')
+            axes[1, 2].set_xlabel('Embedding Strength')
+            axes[1, 2].set_ylabel('Frequency')
+            axes[1, 2].grid(True, alpha=0.3)
+            
+            # Add fusion weights if available
+            if 'fusion_weights' in results:
+                fusion_weights = tensor_to_numpy(results['fusion_weights'], squeeze=True)
+                # Add text annotation for fusion weights
+                weight_text = f"Fusion Weights:\nTexture: {fusion_weights[0]:.3f}\nCodec: {fusion_weights[1]:.3f}\nAdv: {fusion_weights[2]:.3f}"
+                axes[1, 2].text(0.02, 0.98, weight_text, transform=axes[1, 2].transAxes, 
+                               verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(save_dir, 'training_progress.png'), dpi=150, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            print(f"  ⚠️  Training progress visualization failed: {e}")
 
         def save_checkpoint(self, epoch, train_losses, val_losses=None, val_metrics=None, is_best=False):
             """Save model checkpoint"""
